@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+package fastpay;
+
+option java_multiple_files = true;
+option java_package = "fastpayApi";
+option java_outer_classname = "FastPayProto";
+
+service FastPay {
+  rpc ProcessTransaction (TransactionRequest) returns (TransactionResponse);
+  rpc UploadTransactions (stream TransactionRequest) returns (TransactionResponse);
+  rpc TransactionStatus (TransactionQuery) returns (stream TransactionResponse);
+  rpc LiveTransactions (stream TransactionRequest) returns (stream TransactionResponse);
+  rpc GetAccount (AccountQuery) returns (AccountView);
+  rpc GetPayment (TransactionQuery) returns (PaymentRecord);
+  rpc ListAccounts (ListAccountsQuery) returns (ListAccountsView);
+  rpc ListTransactions (ListTransactionsQuery) returns (ListTransactionsView);
+  rpc OpenAccount (OpenAccountRequest) returns (AccountView);
+  rpc RefundTransaction (RefundRequest) returns (TransactionResponse);
+  rpc ListJournal (ListJournalQuery) returns (ListJournalView);
+  rpc CreateApiKey (CreateApiKeyRequest) returns (CreateApiKeyView);
+  rpc RevokeApiKey (RevokeApiKeyRequest) returns (RevokeApiKeyView);
+}
+
+enum PaymentStatus {
+  PAYMENT_STATUS_UNSPECIFIED = 0;
+  PENDING = 1;
+  AUTHORIZED = 2;
+  SETTLED = 3;
+  FAILED = 4;
+  FLAGGED = 5;
+}
+
+message TransactionRequest {
+  string transaction_id = 1;
+  string account_from = 2;
+  string account_to = 3;
+  int64 amount_cents = 4;
+  string currency = 5;
+  int64 client_timestamp_nanos = 6;
+  string memo = 7;
+}
+
+message TransactionResponse {
+  string transaction_id = 1;
+  bool success = 2;
+  string message = 3;
+  int64 processing_nanos = 4;
+  int64 server_timestamp_nanos = 5;
+  bool replayed = 6;
+  PaymentStatus status = 7;
+  int64 amount_cents = 8;
+  string memo = 9;
+}
+
+message TransactionQuery {
+  string transaction_id = 1;
+}
+
+message AccountQuery {
+  string account_id = 1;
+}
+
+message AccountView {
+  string account_id = 1;
+  int64 balance_cents = 2;
+  string currency = 3;
+}
+
+message OpenAccountRequest {
+  string account_id = 1;
+  // Proto3 default 0 means the server opening balance ($10,000.00).
+  int64 opening_cents = 2;
+  string currency = 3;
+}
+
+message RefundRequest {
+  // Original settled payment to reverse.
+  string transaction_id = 1;
+  // Optional idempotency key. Defaults to refund:{transaction_id}.
+  string refund_id = 2;
+}
+
+message ListAccountsQuery {
+  int32 limit = 1;
+  string page_token = 2;
+}
+
+message ListAccountsView {
+  repeated AccountView accounts = 1;
+  string next_page_token = 2;
+}
+
+message ListTransactionsQuery {
+  string account_id = 1;
+  int32 limit = 2;
+  string page_token = 3;
+}
+
+message ListTransactionsView {
+  repeated PaymentRecord payments = 1;
+  string next_page_token = 2;
+}
+
+message PaymentRecord {
+  string transaction_id = 1;
+  string account_from = 2;
+  string account_to = 3;
+  int64 amount_cents = 4;
+  string currency = 5;
+  bool success = 6;
+  string message = 7;
+  PaymentStatus status = 8;
+  int64 created_at_millis = 9;
+  string refund_of = 10;
+  string memo = 11;
+}
+
+message ListJournalQuery {
+  string account_id = 1;
+  int32 limit = 2;
+  string page_token = 3;
+}
+
+message ListJournalView {
+  repeated JournalRecord entries = 1;
+  string next_page_token = 2;
+}
+
+message JournalRecord {
+  string transaction_id = 1;
+  string account_id = 2;
+  int64 delta_cents = 3;
+  string currency = 4;
+}
+
+enum ApiKeyRole {
+  API_KEY_ROLE_UNSPECIFIED = 0;
+  PAYMENTS = 1;
+  ADMIN = 2;
+}
+
+message CreateApiKeyRequest {
+  string label = 1;
+  ApiKeyRole role = 2;
+}
+
+message CreateApiKeyView {
+  string label = 1;
+  ApiKeyRole role = 2;
+  // Plaintext secret, returned only at creation.
+  string token = 3;
+}
+
+message RevokeApiKeyRequest {
+  string token = 1;
+  string label = 2;
+}
+
+message RevokeApiKeyView {
+  string label = 1;
+  bool revoked = 2;
+}
