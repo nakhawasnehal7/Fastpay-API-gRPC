@@ -1,0 +1,44 @@
+package fastPayAPI.security;
+
+import io.grpc.*;
+
+public final class AuthInterceptor implements ServerInterceptor {
+    private final TokenStore tokens;
+
+    public AuthInterceptor(TokenStore tokens) {
+        this.tokens = tokens;
+    }
+
+    public AuthInterceptor(String paymentsToken) {
+        this(TokenStore.seeded(paymentsToken, Auth.ADMIN_TOKEN));
+    }
+
+    @Override
+    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+            ServerCall<ReqT, RespT> call,
+            Metadata headers,
+            ServerCallHandler<ReqT, RespT> next
+    ) {
+        if (isPublicService(call.getMethodDescriptor().getServiceName())) {
+            return next.startCall(call, headers);
+        }
+        String value = headers.get(Auth.AUTHORIZATION);
+        return tokens.authenticate(value)
+                .map(role -> {
+                    var ctx = io.grpc.Context.current().withValue(AuthContext.ROLE, role);
+                    return Contexts.interceptCall(ctx, call, headers, next);
+                })
+                .orElseGet(() -> {
+                    call.close(Status.UNAUTHENTICATED.withDescription(
+                            "missing or invalid authorization (Bearer pay-token or admin-token)"
+                    ), new Metadata());
+                    return new ServerCall.Listener<>() {};
+                });
+    }
+
+    static boolean isPublicService(String serviceName) {
+        return "grpc.health.v1.Health".equals(serviceName)
+                || "grpc.reflection.v1alpha.ServerReflection".equals(serviceName)
+                || "grpc.reflection.v1.ServerReflection".equals(serviceName);
+    }
+}
